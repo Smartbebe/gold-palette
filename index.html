@@ -379,6 +379,14 @@
   .memo-card-title { font-size: 15px; font-weight: 600; color: #292827; margin-bottom: 4px; }
   .memo-card-body { font-size: 13px; color: #77736D; margin-bottom: 8px; white-space: pre-wrap; overflow-wrap: break-word; }
   .memo-card-tag { font-size: 11px; color: #A7A29A; display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
+  .longpress-target { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  .memo-card-images img, .memo-list-row img { cursor: zoom-in; }
+  #imageViewer { display: none; position: fixed; inset: 0; z-index: 300; background: rgba(20,18,14,0.92); align-items: center; justify-content: center; }
+  #imageViewer img { max-width: 94vw; max-height: 86vh; object-fit: contain; border-radius: 6px; }
+  .iv-close { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 14px); right: 16px; width: 40px; height: 40px; border-radius: 50%; border: none; background: rgba(255,255,255,0.18); color: #fff; font-size: 18px; cursor: pointer; }
+  .iv-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 40px; height: 56px; border: none; background: rgba(255,255,255,0.14); color: #fff; font-size: 28px; align-items: center; justify-content: center; cursor: pointer; }
+  .iv-prev { left: 4px; border-radius: 0 12px 12px 0; } .iv-next { right: 4px; border-radius: 12px 0 0 12px; }
+  .iv-count { position: absolute; bottom: calc(env(safe-area-inset-bottom, 0px) + 22px); color: #fff; font-size: 13px; letter-spacing: 0.1em; }
   .memo-card-images { display: flex; gap: 6px; flex-wrap: wrap; }
   .memo-card-images img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid #E8E4DD; }
   .memo-list-row {
@@ -1140,7 +1148,6 @@ function renderMemoView() {
     const task = tasks.find(t => t.id === m.task_id);
     const card = document.createElement("div");
     card.className = "memo-card";
-    card.onclick = () => openMemoModal(m, null);
     let html = "";
     if (m.title) html += `<div class="memo-card-title">${escapeHtml(m.title)}</div>`;
     if (task) {
@@ -1151,12 +1158,70 @@ function renderMemoView() {
     }
     if (m.body) html += `<div class="memo-card-body">${escapeHtml(m.body.length > 120 ? m.body.slice(0, 120) + "…" : m.body)}</div>`;
     if (m.images && m.images.length > 0) {
-      html += `<div class="memo-card-images">` + m.images.slice(0, 4).map(img => `<img src="${img.url}" />`).join("") + (m.images.length > 4 ? `<span style="font-size:12px;color:#A7A29A;align-self:center;">+${m.images.length - 4}</span>` : "") + `</div>`;
+      html += `<div class="memo-card-images">` + m.images.slice(0, 4).map((img, i) => `<img src="${img.url}" data-idx="${i}" />`).join("") + (m.images.length > 4 ? `<span style="font-size:12px;color:#A7A29A;align-self:center;">+${m.images.length - 4}</span>` : "") + `</div>`;
     }
     card.innerHTML = html;
+    card.querySelectorAll(".memo-card-title,.memo-card-body,.memo-card-tag").forEach(el => attachLongPress(el, () => openMemoModal(m, null)));
+    card.querySelectorAll(".memo-card-images img").forEach(img => {
+      img.onclick = (e) => { e.stopPropagation(); openImageViewer(m.images.map(x => x.url), parseInt(img.dataset.idx, 10)); };
+    });
     root.appendChild(card);
   });
 }
+
+// ---- 長押し（メモの文字部分を長押しで編集） ----
+function attachLongPress(el, fn) {
+  let timer = null, sx = 0, sy = 0, fired = false;
+  const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  el.classList.add("longpress-target");
+  el.addEventListener("touchstart", (e) => {
+    fired = false;
+    const t = e.touches[0]; sx = t.clientX; sy = t.clientY;
+    cancel();
+    timer = setTimeout(() => { timer = null; fired = true; if (navigator.vibrate) { try { navigator.vibrate(15); } catch (_) {} } fn(); }, 500);
+  }, { passive: true });
+  el.addEventListener("touchmove", (e) => {
+    const t = e.touches[0];
+    if (Math.abs(t.clientX - sx) > 8 || Math.abs(t.clientY - sy) > 8) cancel();
+  }, { passive: true });
+  el.addEventListener("touchend", (e) => { cancel(); if (fired) e.preventDefault(); });
+  el.addEventListener("touchcancel", cancel);
+  el.addEventListener("contextmenu", (e) => { e.preventDefault(); cancel(); if (!fired) fn(); fired = false; });
+  // マウス（PC）
+  el.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    fired = false; sx = e.clientX; sy = e.clientY; cancel();
+    timer = setTimeout(() => { timer = null; fired = true; fn(); }, 500);
+  });
+  el.addEventListener("mousemove", (e) => { if (timer && (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8)) cancel(); });
+  el.addEventListener("mouseup", cancel);
+  el.addEventListener("mouseleave", cancel);
+}
+
+// ---- 画像ビューア ----
+let viewerUrls = [], viewerIdx = 0;
+function openImageViewer(urls, idx) {
+  viewerUrls = urls; viewerIdx = idx || 0;
+  let v = document.getElementById("imageViewer");
+  if (!v) {
+    v = document.createElement("div");
+    v.id = "imageViewer";
+    v.innerHTML = `<button class="iv-close" onclick="closeImageViewer()">✕</button><button class="iv-nav iv-prev" onclick="event.stopPropagation();stepImageViewer(-1)">‹</button><img id="imageViewerImg" /><button class="iv-nav iv-next" onclick="event.stopPropagation();stepImageViewer(1)">›</button><div class="iv-count" id="imageViewerCount"></div>`;
+    v.addEventListener("click", (e) => { if (e.target === v) closeImageViewer(); });
+    document.body.appendChild(v);
+  }
+  v.style.display = "flex";
+  showViewerImage();
+}
+function showViewerImage() {
+  document.getElementById("imageViewerImg").src = viewerUrls[viewerIdx];
+  const multi = viewerUrls.length > 1;
+  const v = document.getElementById("imageViewer");
+  v.querySelectorAll(".iv-nav").forEach(b => b.style.display = multi ? "flex" : "none");
+  document.getElementById("imageViewerCount").textContent = multi ? `${viewerIdx + 1} / ${viewerUrls.length}` : "";
+}
+function stepImageViewer(d) { viewerIdx = (viewerIdx + d + viewerUrls.length) % viewerUrls.length; showViewerImage(); }
+function closeImageViewer() { const v = document.getElementById("imageViewer"); if (v) v.style.display = "none"; }
 
 function renderList() {
   const root = document.getElementById("categories");
@@ -1453,7 +1518,9 @@ function renderTaskMemoList() {
     row.className = "memo-list-row";
     const thumb = m.images && m.images.length > 0 ? `<img src="${m.images[0].url}" />` : "";
     row.innerHTML = `${thumb}<span class="memo-list-row-title">${escapeHtml(m.title || (m.body ? m.body.slice(0, 30) : "(無題)"))}</span>`;
-    row.onclick = () => { closeTaskMemoList(); openMemoModal(m, null); };
+    const ti = row.querySelector("img");
+    if (ti) ti.onclick = (e) => { e.stopPropagation(); openImageViewer(m.images.map(x => x.url), 0); };
+    attachLongPress(row.querySelector(".memo-list-row-title"), () => { closeTaskMemoList(); openMemoModal(m, null); });
     el.appendChild(row);
   });
 }
