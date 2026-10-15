@@ -377,14 +377,16 @@
     background: #FFFFFF; border: 1px solid #E8E4DD; border-radius: 14px; padding: 12px; margin-bottom: 10px; cursor: pointer;
   }
   .memo-card-title { font-size: 15px; font-weight: 600; color: #292827; margin-bottom: 4px; }
-  .memo-card-body { font-size: 13px; color: #77736D; margin-bottom: 8px; white-space: pre-wrap; overflow-wrap: break-word; }
+  .memo-card-body { font-size: 13px; color: #77736D; margin-bottom: 8px; white-space: pre-wrap; overflow-wrap: break-word; max-height: 9.5em; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding-right: 4px; touch-action: pan-y; }
   .memo-card-tag { font-size: 11px; color: #A7A29A; display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
   .longpress-target { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   .memo-card-images img, .memo-list-row img { cursor: zoom-in; }
   #imageViewer { display: none; position: fixed; inset: 0; z-index: 300; background: rgba(20,18,14,0.92); align-items: center; justify-content: center; }
-  #imageViewer img { max-width: 94vw; max-height: 86vh; object-fit: contain; border-radius: 6px; }
+  #imageViewer img { -webkit-touch-callout: default; -webkit-user-select: auto; user-select: auto; max-width: 94vw; max-height: 86vh; object-fit: contain; border-radius: 6px; }
   .iv-close { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 14px); right: 16px; width: 40px; height: 40px; border-radius: 50%; border: none; background: rgba(255,255,255,0.18); color: #fff; font-size: 18px; cursor: pointer; }
   .iv-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 40px; height: 56px; border: none; background: rgba(255,255,255,0.14); color: #fff; font-size: 28px; align-items: center; justify-content: center; cursor: pointer; }
+  .iv-save { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 14px); left: 16px; height: 40px; padding: 0 16px; border-radius: 20px; border: none; background: rgba(255,255,255,0.18); color: #fff; font-size: 14px; cursor: pointer; }
+  .iv-hint { position: absolute; bottom: calc(env(safe-area-inset-bottom, 0px) + 48px); color: rgba(255,255,255,0.6); font-size: 11px; }
   .iv-prev { left: 4px; border-radius: 0 12px 12px 0; } .iv-next { right: 4px; border-radius: 12px 0 0 12px; }
   .iv-count { position: absolute; bottom: calc(env(safe-area-inset-bottom, 0px) + 22px); color: #fff; font-size: 13px; letter-spacing: 0.1em; }
   .memo-card-images { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -776,7 +778,7 @@
       <button onclick="closeMemoModal()">✕</button>
     </div>
     <input type="text" id="memoTitleInput" placeholder="タイトル（任意）" />
-    <textarea id="memoBodyInput" placeholder="メモの内容" style="width:100%;min-height:100px;font-size:15px;border:1px solid #E8E4DD;border-radius:10px;padding:10px 12px;margin-bottom:10px;outline:none;font-family:inherit;color:#292827;resize:vertical;"></textarea>
+    <textarea id="memoBodyInput" placeholder="メモの内容" style="width:100%;min-height:140px;max-height:45vh;overflow-y:auto;font-size:15px;border:1px solid #E8E4DD;border-radius:10px;padding:10px 12px;margin-bottom:10px;outline:none;font-family:inherit;color:#292827;resize:vertical;"></textarea>
     <div id="memoImagesPreview" class="memo-images-grid"></div>
     <label class="outline-btn" style="cursor:pointer;">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
@@ -1156,7 +1158,7 @@ function renderMemoView() {
     } else {
       html += `<div class="memo-card-tag">スタンドアロン</div>`;
     }
-    if (m.body) html += `<div class="memo-card-body">${escapeHtml(m.body.length > 120 ? m.body.slice(0, 120) + "…" : m.body)}</div>`;
+    if (m.body) html += `<div class="memo-card-body">${escapeHtml(m.body)}</div>`;
     if (m.images && m.images.length > 0) {
       html += `<div class="memo-card-images">` + m.images.slice(0, 4).map((img, i) => `<img src="${img.url}" data-idx="${i}" />`).join("") + (m.images.length > 4 ? `<span style="font-size:12px;color:#A7A29A;align-self:center;">+${m.images.length - 4}</span>` : "") + `</div>`;
     }
@@ -1206,7 +1208,7 @@ function openImageViewer(urls, idx) {
   if (!v) {
     v = document.createElement("div");
     v.id = "imageViewer";
-    v.innerHTML = `<button class="iv-close" onclick="closeImageViewer()">✕</button><button class="iv-nav iv-prev" onclick="event.stopPropagation();stepImageViewer(-1)">‹</button><img id="imageViewerImg" /><button class="iv-nav iv-next" onclick="event.stopPropagation();stepImageViewer(1)">›</button><div class="iv-count" id="imageViewerCount"></div>`;
+    v.innerHTML = `<button class="iv-close" onclick="closeImageViewer()">✕</button><button class="iv-save" onclick="event.stopPropagation();saveViewerImage()">保存</button><div class="iv-hint">画像を長押しでも保存できます</div><button class="iv-nav iv-prev" onclick="event.stopPropagation();stepImageViewer(-1)">‹</button><img id="imageViewerImg" /><button class="iv-nav iv-next" onclick="event.stopPropagation();stepImageViewer(1)">›</button><div class="iv-count" id="imageViewerCount"></div>`;
     v.addEventListener("click", (e) => { if (e.target === v) closeImageViewer(); });
     document.body.appendChild(v);
   }
@@ -1221,6 +1223,25 @@ function showViewerImage() {
   document.getElementById("imageViewerCount").textContent = multi ? `${viewerIdx + 1} / ${viewerUrls.length}` : "";
 }
 function stepImageViewer(d) { viewerIdx = (viewerIdx + d + viewerUrls.length) % viewerUrls.length; showViewerImage(); }
+async function saveViewerImage() {
+  const url = viewerUrls[viewerIdx];
+  try {
+    const blob = await (await fetch(url)).blob();
+    const ext = (blob.type.split("/")[1] || "jpg").replace("jpeg", "jpg");
+    const file = new File([blob], `memo-${Date.now()}.${ext}`, { type: blob.type });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file] });
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = file.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  } catch (e) {
+    if (e && e.name === "AbortError") return;
+    alert("保存できませんでした。画像を長押しして保存してください。");
+  }
+}
 function closeImageViewer() { const v = document.getElementById("imageViewer"); if (v) v.style.display = "none"; }
 
 function renderList() {
